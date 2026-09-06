@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="referrer" content="no-referrer" />
 <title>Booru Feed</title>
 
 <link rel="manifest" href="manifest.json" />
@@ -608,6 +609,7 @@
       mediaEl.loading = 'lazy';
       mediaEl.alt = (post.tags || '').split(' ').slice(0, 6).join(', ');
     }
+    mediaEl.referrerPolicy = 'no-referrer';
     mediaEl.style.aspectRatio = w + ' / ' + h;
     mediaEl.addEventListener('click', function () { openDetail(post, fullUrl); });
     mediaWrap.appendChild(mediaEl);
@@ -662,6 +664,7 @@
       mediaEl = document.createElement('img');
       mediaEl.src = fullUrl;
     }
+    mediaEl.referrerPolicy = 'no-referrer';
     el.detailMedia.appendChild(mediaEl);
 
     var tags = (post.tags || '').trim().split(/\s+/).filter(Boolean);
