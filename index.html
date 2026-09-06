@@ -581,6 +581,12 @@
 
   // ---------- rendering ----------
   function isVideo(url) { return /\.(mp4|webm)(\?|$)/i.test(url); }
+  function toHttps(url) {
+    if (typeof url === 'string' && url.indexOf('http://') === 0) {
+      return 'https://' + url.slice('http://'.length);
+    }
+    return url;
+  }
 
   function renderPost(post) {
     var article = document.createElement('article');
@@ -589,8 +595,8 @@
     var mediaWrap = document.createElement('div');
     mediaWrap.className = 'post-media';
 
-    var mediaUrl = post.sample_url || post.file_url;
-    var fullUrl = post.file_url || post.sample_url;
+    var mediaUrl = toHttps(post.sample_url || post.file_url);
+    var fullUrl = toHttps(post.file_url || post.sample_url);
     var w = post.width || post.sample_width || 800;
     var h = post.height || post.sample_height || 600;
 
