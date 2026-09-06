@@ -275,6 +275,21 @@
     margin: 10px 0 0;
   }
 
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 16px 0 0;
+    font-size: 0.85rem;
+    color: var(--text);
+  }
+  .checkbox-row input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--accent);
+    flex-shrink: 0;
+  }
+
   .rating-pills {
     display: flex;
     gap: 8px;
@@ -406,6 +421,11 @@
     <label for="userIdInput">user id</label>
     <input id="userIdInput" type="text" placeholder="optional" autocomplete="off" autocapitalize="off" />
     <p class="hint">on gelbooru: my account → options → api access key, next to your user id. leave blank to use the public, rate-limited endpoint.</p>
+    <label class="checkbox-row" for="proxyImagesInput">
+      <input id="proxyImagesInput" type="checkbox" />
+      <span>also route images through this base url</span>
+    </label>
+    <p class="hint">turn this on if images show as broken/blank even though the feed loads — some sites block images requested from a different domain. only works if your base url is a proxy that supports it (like the included worker).</p>
     <button id="saveSettings" class="primary-btn">save</button>
   </section>
 
@@ -426,7 +446,8 @@
     apiKey: '',
     userId: '',
     tags: '',
-    rating: 'safe'
+    rating: 'safe',
+    proxyImages: false
   };
 
   var LIMIT = 30;
@@ -472,6 +493,7 @@
     baseUrlInput: document.getElementById('baseUrlInput'),
     apiKeyInput: document.getElementById('apiKeyInput'),
     userIdInput: document.getElementById('userIdInput'),
+    proxyImagesInput: document.getElementById('proxyImagesInput'),
     detailModal: document.getElementById('detailModal'),
     detailMedia: document.getElementById('detailMedia'),
     detailInfo: document.getElementById('detailInfo'),
@@ -504,6 +526,7 @@
     el.baseUrlInput.value = state.config.baseUrl;
     el.apiKeyInput.value = state.config.apiKey;
     el.userIdInput.value = state.config.userId;
+    el.proxyImagesInput.checked = !!state.config.proxyImages;
     openSheet(el.settingsSheet);
   });
 
@@ -532,6 +555,7 @@
     state.config.baseUrl = url || DEFAULTS.baseUrl;
     state.config.apiKey = el.apiKeyInput.value.trim();
     state.config.userId = el.userIdInput.value.trim();
+    state.config.proxyImages = el.proxyImagesInput.checked;
     saveConfig();
     closeSheets();
     resetFeed();
@@ -587,6 +611,13 @@
     }
     return url;
   }
+  function mediaSrc(url) {
+    url = toHttps(url);
+    if (state.config.proxyImages && url) {
+      return state.config.baseUrl + '/media?url=' + encodeURIComponent(url);
+    }
+    return url;
+  }
 
   function renderPost(post) {
     var article = document.createElement('article');
@@ -595,13 +626,14 @@
     var mediaWrap = document.createElement('div');
     mediaWrap.className = 'post-media';
 
-    var mediaUrl = toHttps(post.sample_url || post.file_url);
-    var fullUrl = toHttps(post.file_url || post.sample_url);
+    var rawMediaUrl = post.sample_url || post.file_url;
+    var mediaUrl = mediaSrc(rawMediaUrl);
+    var fullUrl = mediaSrc(post.file_url || post.sample_url);
     var w = post.width || post.sample_width || 800;
     var h = post.height || post.sample_height || 600;
 
     var mediaEl;
-    if (isVideo(mediaUrl)) {
+    if (isVideo(rawMediaUrl)) {
       mediaEl = document.createElement('video');
       mediaEl.src = mediaUrl;
       mediaEl.controls = true;
@@ -659,7 +691,7 @@
   function openDetail(post, fullUrl) {
     el.detailMedia.innerHTML = '';
     var mediaEl;
-    if (isVideo(fullUrl)) {
+    if (isVideo(post.file_url || post.sample_url)) {
       mediaEl = document.createElement('video');
       mediaEl.src = fullUrl;
       mediaEl.controls = true;
