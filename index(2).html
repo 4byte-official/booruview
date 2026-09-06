@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="referrer" content="no-referrer" />
+<title>Booru Feed</title>
+
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#161412" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="BooruFeed" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<link rel="icon" href="icon-192.png" type="image/png" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --bg: #161412;
+    --surface: #1e1b18;
+    --surface-2: #24201c;
+    --border: #322d28;
+    --text: #f2efea;
+    --text-muted: #9c948a;
+    --accent: #e0942c;
+    --accent-soft: rgba(224, 148, 44, 0.16);
+    --safe: #6e8f63;
+    --explicit: #b5544a;
+    --radius-sheet: 20px;
+    --font-ui: 'Sora', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    height: 100%;
+    overscroll-behavior-y: contain;
+  }
+
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  button {
+    font-family: inherit;
+    color: inherit;
+    background: none;
+    border: none;
+    cursor: pointer;
+  }
+
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  input, select {
+    font-family: inherit;
+    color: var(--text);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 16px;
+    width: 100%;
+  }
+
+  /* ---------- header (topbar + tagbar, sticky as one unit) ---------- */
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: rgba(22, 20, 18, 0.94);
+    backdrop-filter: blur(10px);
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .wordmark { font-size: 1.05rem; font-weight: 600; letter-spacing: -0.01em; }
+  .topbar-actions { display: flex; gap: 2px; }
+
+  .icon-btn {
+    width: 36px; height: 36px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.1rem;
+    border-radius: 10px;
+    color: var(--text-muted);
+  }
+  .icon-btn:active { background: var(--surface-2); color: var(--text); }
+
+  /* ---------- tag filter bar ---------- */
+  .tagbar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 10px 16px;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--border);
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tagbar::-webkit-scrollbar { display: none; }
+
+  .tag-filter-chip {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 2px 2px 2px 4px;
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    white-space: nowrap;
+  }
+  .tag-filter-chip .mode-btn { font-weight: 700; padding: 6px 5px; border-radius: 999px; }
+  .tag-filter-chip .tag-label { padding: 6px 2px; color: var(--text); }
+  .tag-filter-chip .remove-btn { padding: 6px 8px; color: var(--text-muted); }
+  .tag-filter-chip .remove-btn:active { color: var(--text); }
+  .tag-filter-chip.mode-plus .mode-btn { color: var(--safe); }
+  .tag-filter-chip.mode-minus .mode-btn { color: var(--explicit); }
+  .tag-filter-chip.mode-tilde .mode-btn { color: var(--accent); }
+
+  .add-tag-pill {
+    flex-shrink: 0;
+    border: 1px dashed var(--border);
+    border-radius: 999px;
+    padding: 8px 16px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+  .add-tag-pill:active { border-color: var(--accent); color: var(--accent); }
+
+  /* ---------- feed ---------- */
+  .feed { max-width: 640px; margin: 0 auto; padding-bottom: 24px; }
+  .post { border-bottom: 1px solid var(--border); }
+
+  .post-media { width: 100%; background: var(--surface); display: block; position: relative; overflow: hidden; }
+  .post-media img, .post-media video { display: block; width: 100%; height: auto; cursor: zoom-in; }
+
+  .meta-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    background: var(--surface);
+  }
+  .meta-toggle .meta-summary { color: var(--text); display: flex; gap: 8px; align-items: center; }
+  .meta-toggle .arrow { color: var(--accent); }
+  .meta-toggle .rating-tag.safe { color: var(--safe); }
+  .meta-toggle .rating-tag.questionable { color: var(--accent); }
+  .meta-toggle .rating-tag.explicit { color: var(--explicit); }
+  .meta-chevron { transition: transform 0.2s ease; }
+  .meta-toggle[aria-expanded="true"] .meta-chevron { transform: rotate(180deg); }
+  @media (prefers-reduced-motion: reduce) { .meta-chevron { transition: none; } }
+
+  .post-meta-expanded { padding: 2px 16px 14px; background: var(--surface); }
+  .post-meta-expanded .tag-row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .post-meta-expanded .tag-chip {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 3px 9px;
+  }
+  .post-meta-expanded .tag-chip:active { border-color: var(--accent); color: var(--accent); }
+
+  /* ---------- feed states ---------- */
+  .feed-state { padding: 60px 24px; text-align: center; color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; }
+  .feed-state h3 { color: var(--text); font-size: 1rem; font-weight: 600; margin: 0 0 6px; }
+  .retry-btn { margin-top: 14px; display: inline-block; border: 1px solid var(--border); border-radius: 10px; padding: 9px 18px; color: var(--text); font-size: 0.85rem; }
+  .retry-btn:active { border-color: var(--accent); color: var(--accent); }
+
+  .loading-row { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 22px; color: var(--text-muted); font-family: var(--font-mono); font-size: 0.78rem; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 1s ease-in-out infinite; }
+  .dot:nth-child(2) { animation-delay: 0.15s; }
+  .dot:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes pulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+
+  #sentinel { height: 1px; }
+
+  /* ---------- pager (paged mode) ---------- */
+  .pager-bar {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    background: rgba(22, 20, 18, 0.95);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid var(--border);
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  .pager-btn { border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; color: var(--text); font-size: 0.85rem; }
+  .pager-btn:disabled { color: var(--text-muted); opacity: 0.35; }
+  .pager-btn:not(:disabled):active { border-color: var(--accent); color: var(--accent); }
+  .page-indicator { font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-muted); }
+
+  /* ---------- overlay + sheets ---------- */
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 30; }
+
+  .sheet {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 40;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+    padding: 10px 20px calc(24px + env(safe-area-inset-bottom));
+    max-width: 640px;
+    margin: 0 auto;
+    max-height: 82vh;
+    overflow-y: auto;
+    transform: translateY(100%);
+    transition: transform 0.28s cubic-bezier(.32,.72,0,1);
+  }
+  .sheet.open { transform: translateY(0); }
+  @media (prefers-reduced-motion: reduce) { .sheet { transition: none; } }
+
+  .sheet-handle { width: 36px; height: 4px; background: var(--border); border-radius: 999px; margin: 6px auto 16px; position: sticky; top: 0; }
+  .sheet h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 14px; }
+  .sheet label.field-label { display: block; font-size: 0.78rem; color: var(--text-muted); margin: 18px 0 6px; }
+  .sheet label.field-label:first-of-type { margin-top: 0; }
+
+  .hint { font-size: 0.78rem; color: var(--text-muted); line-height: 1.5; margin: 10px 0 0; }
+
+  .checkbox-row { display: flex; align-items: center; gap: 10px; margin: 16px 0 0; font-size: 0.85rem; color: var(--text); }
+  .checkbox-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; }
+
+  .primary-btn {
+    width: 100%; margin-top: 22px; padding: 14px;
+    background: var(--accent); color: #1a1108; font-weight: 600; font-size: 0.95rem; border-radius: 12px;
+  }
+  .primary-btn:active { opacity: 0.85; }
+  .secondary-btn {
+    width: 100%; margin-top: 10px; padding: 12px;
+    border: 1px solid var(--border); color: var(--text-muted); font-size: 0.85rem; border-radius: 12px;
+  }
+  .secondary-btn:active { border-color: var(--accent); color: var(--accent); }
+
+  /* add-tag sheet specifics */
+  .tag-input-row { display: flex; gap: 8px; }
+  .tag-input-row input { flex: 1; }
+  .mode-select-btn {
+    width: 48px; flex-shrink: 0;
+    border: 1px solid var(--border); border-radius: 10px;
+    font-family: var(--font-mono); font-weight: 700; font-size: 1rem;
+  }
+  .suggestion-list { max-height: 220px; overflow-y: auto; margin-top: 10px; border: 1px solid var(--border); border-radius: 10px; }
+  .suggestion-row { display: block; width: 100%; text-align: left; padding: 11px 14px; font-family: var(--font-mono); font-size: 0.82rem; color: var(--text); border-bottom: 1px solid var(--border); }
+  .suggestion-row:last-child { border-bottom: none; }
+  .suggestion-row:active { background: var(--surface-2); }
+  .added-tags-mini { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
+
+  /* sort sheet specifics */
+  .sort-row { display: flex; gap: 10px; align-items: center; }
+  .dir-btn { border: 1px solid var(--border); border-radius: 10px; width: 44px; height: 44px; font-size: 1.1rem; color: var(--text); flex-shrink: 0; }
+  .dir-btn:active { border-color: var(--accent); color: var(--accent); }
+  .score-row { display: flex; align-items: center; gap: 10px; }
+  .score-row .score-symbol { color: var(--text-muted); font-family: var(--font-mono); }
+
+  .segmented { display: flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .seg-btn { flex: 1; padding: 10px 4px; font-size: 0.76rem; color: var(--text-muted); text-align: center; border-right: 1px solid var(--border); }
+  .seg-btn:last-child { border-right: none; }
+  .seg-btn.active { background: var(--accent); color: #1a1108; font-weight: 600; }
+
+  /* ---------- detail modal ---------- */
+  .detail-modal { position: fixed; inset: 0; z-index: 50; background: rgba(10, 9, 8, 0.97); display: flex; flex-direction: column; }
+  .detail-modal img, .detail-modal video { max-width: 100%; max-height: 78vh; margin: auto; display: block; }
+  .detail-close {
+    position: absolute; top: calc(14px + env(safe-area-inset-top)); right: 14px;
+    width: 38px; height: 38px; border-radius: 50%; background: rgba(255,255,255,0.08);
+    display: flex; align-items: center; justify-content: center; font-size: 1rem; z-index: 2;
+  }
+  .detail-info { padding: 14px 18px calc(20px + env(safe-area-inset-bottom)); font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-muted); }
+  .detail-info a { color: var(--accent); text-decoration: none; }
+
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <header class="header">
+    <div class="topbar">
+      <span class="wordmark">boorufeed</span>
+      <div class="topbar-actions">
+        <button id="refreshBtn" class="icon-btn" aria-label="Refresh feed">⟳</button>
+        <button id="addTagBtn2" class="icon-btn" aria-label="Add tag">⌕</button>
+        <button id="sortBtn" class="icon-btn" aria-label="Sorting and filtering">⇅</button>
+        <button id="settingsBtn" class="icon-btn" aria-label="Site settings">⚙</button>
+      </div>
+    </div>
+    <div class="tagbar" id="tagBar">
+      <div class="tagbar-chips" id="tagBarChips" style="display:contents;"></div>
+      <button id="addTagPill" class="add-tag-pill">+ tag</button>
+    </div>
+  </header>
+
+  <main id="feed" class="feed">
+    <div id="postsContainer"></div>
+
+    <div id="feedEmpty" class="feed-state" hidden>
+      <h3>nothing here</h3>
+      <p>no posts matched those tags and filters. try loosening the search.</p>
+    </div>
+
+    <div id="feedError" class="feed-state" hidden>
+      <h3>couldn't load posts</h3>
+      <p id="feedErrorMsg">check your base url in settings and your connection.</p>
+      <button id="retryBtn" class="retry-btn">retry</button>
+    </div>
+
+    <div id="loadingRow" class="loading-row" hidden>
+      <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+    </div>
+
+    <div id="endRow" class="loading-row" hidden><span>end of results</span></div>
+
+    <div id="sentinel"></div>
+  </main>
+
+  <div id="pagerBar" class="pager-bar" hidden>
+    <button id="prevPageBtn" class="pager-btn">‹ prev</button>
+    <span id="pageIndicator" class="page-indicator">page 1</span>
+    <button id="nextPageBtn" class="pager-btn">next ›</button>
+  </div>
+
+  <div id="overlay" class="overlay" hidden></div>
+
+  <!-- add tag sheet -->
+  <section id="addTagSheet" class="sheet" hidden>
+    <div class="sheet-handle"></div>
+    <h2>add tag</h2>
+    <div class="tag-input-row">
+      <button id="newTagMode" class="mode-select-btn" data-mode="+">+</button>
+      <input id="newTagInput" type="text" placeholder="type to search tags…" autocomplete="off" autocapitalize="off" />
+    </div>
+    <p class="hint">tap the mode button to switch between include (+), exclude (-), and optional (~) before adding. you can also just type a leading -/~ directly.</p>
+    <div id="tagSuggestions" class="suggestion-list"></div>
+    <div id="addedTagsMini" class="added-tags-mini"></div>
+    <button id="doneAddingTags" class="primary-btn">done</button>
+  </section>
+
+  <!-- sorting and filtering sheet -->
+  <section id="sortSheet" class="sheet" hidden>
+    <div class="sheet-handle"></div>
+    <h2>sorting and filtering</h2>
+
+    <label class="field-label">sorting</label>
+    <div class="sort-row">
+      <button id="sortDirBtn" class="dir-btn">↓</button>
+      <select id="sortFieldSelect">
+        <option value="">default</option>
+        <option value="score">score</option>
+        <option value="id">id</option>
+        <option value="rating">rating</option>
+        <option value="updated">updated</option>
+        <option value="random">random</option>
+      </select>
+    </div>
+
+    <label class="field-label">filtering by score</label>
+    <div class="score-row">
+      <span class="score-symbol">&ge;</span>
+      <input id="minScoreInput" type="number" inputmode="numeric" placeholder="0" />
+    </div>
+
+    <label class="field-label">rating</label>
+    <div class="segmented" id="ratingSegmented">
+      <button data-rating="all" class="seg-btn">all</button>
+      <button data-rating="safe" class="seg-btn">safe</button>
+      <button data-rating="questionable" class="seg-btn">questionable</button>
+      <button data-rating="explicit" class="seg-btn">explicit</button>
+    </div>
+
+    <label class="field-label">browsing style</label>
+    <div class="segmented" id="pagingSegmented">
+      <button data-paging="infinite" class="seg-btn">infinite scroll</button>
+      <button data-paging="paged" class="seg-btn">pages</button>
+    </div>
+
+    <button id="applySort" class="primary-btn">done</button>
+    <button id="resetSort" class="secondary-btn">reset filters</button>
+  </section>
+
+  <!-- site settings sheet -->
+  <section id="settingsSheet" class="sheet" hidden>
+    <div class="sheet-handle"></div>
+    <h2>site settings</h2>
+    <label class="field-label" for="baseUrlInput">base url</label>
+    <input id="baseUrlInput" type="text" placeholder="https://gelbooru.com" autocomplete="off" autocapitalize="off" />
+    <label class="field-label" for="apiKeyInput">api key</label>
+    <input id="apiKeyInput" type="text" placeholder="optional" autocomplete="off" autocapitalize="off" />
+    <label class="field-label" for="userIdInput">user id</label>
+    <input id="userIdInput" type="text" placeholder="optional" autocomplete="off" autocapitalize="off" />
+    <p class="hint">on gelbooru: my account → options → api access key, next to your user id. leave blank to use the public, rate-limited endpoint.</p>
+    <label class="checkbox-row" for="proxyImagesInput">
+      <input id="proxyImagesInput" type="checkbox" />
+      <span>also route images through this base url</span>
+    </label>
+    <p class="hint">turn this on if images show as broken/blank even though the feed loads — some sites block images requested from a different domain. only works if your base url is a proxy that supports it (like the included worker).</p>
+    <button id="saveSettings" class="primary-btn">save</button>
+  </section>
+
+  <div id="detailModal" class="detail-modal" hidden>
+    <button id="closeDetail" class="detail-close" aria-label="Close">✕</button>
+    <div id="detailMedia"></div>
+    <div id="detailInfo" class="detail-info"></div>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var DEFAULTS = {
+    baseUrl: 'https://gelbooru.com',
+    apiKey: '',
+    userId: '',
+    tagList: [],
+    rating: 'safe',
+    sortField: '',
+    sortDir: 'desc',
+    minScore: 0,
+    pagingMode: 'infinite',
+    proxyImages: false
+  };
+
+  var LIMIT = 30;
+  var STORAGE_KEY = 'boorufeed:config';
+
+  var state = {
+    config: loadConfig(),
+    pid: 0,
+    isLoading: false,
+    reachedEnd: false
+  };
+
+  // ---------- persistence + migration ----------
+  function loadConfig() {
+    var cfg = Object.assign({}, DEFAULTS);
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) Object.assign(cfg, JSON.parse(raw));
+    } catch (e) { /* storage unavailable; fall back to defaults for this session */ }
+    return migrateConfig(cfg);
+  }
+
+  function migrateConfig(cfg) {
+    if (!Array.isArray(cfg.tagList)) {
+      var list = [];
+      if (typeof cfg.tags === 'string' && cfg.tags.trim()) {
+        cfg.tags.trim().split(/\s+/).forEach(function (tok) {
+          var mode = '+', value = tok;
+          if (tok.indexOf('-') === 0) { mode = '-'; value = tok.slice(1); }
+          else if (tok.indexOf('~') === 0) { mode = '~'; value = tok.slice(1); }
+          if (value) list.push({ value: value, mode: mode });
+        });
+      }
+      cfg.tagList = list;
+    }
+    delete cfg.tags;
+    if (typeof cfg.sortField !== 'string') cfg.sortField = '';
+    if (cfg.sortDir !== 'asc' && cfg.sortDir !== 'desc') cfg.sortDir = 'desc';
+    if (typeof cfg.minScore !== 'number' || isNaN(cfg.minScore)) cfg.minScore = 0;
+    if (cfg.pagingMode !== 'paged' && cfg.pagingMode !== 'infinite') cfg.pagingMode = 'infinite';
+    if (typeof cfg.proxyImages !== 'boolean') cfg.proxyImages = false;
+    if (cfg.rating !== 'all' && cfg.rating !== 'safe' && cfg.rating !== 'questionable' && cfg.rating !== 'explicit') cfg.rating = 'safe';
+    return cfg;
+  }
+
+  function saveConfig() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.config)); }
+    catch (e) { /* storage unavailable; config will just live for this session */ }
+  }
+
+  // ---------- dom refs ----------
+  var el = {
+    postsContainer: document.getElementById('postsContainer'),
+    feedEmpty: document.getElementById('feedEmpty'),
+    feedError: document.getElementById('feedError'),
+    feedErrorMsg: document.getElementById('feedErrorMsg'),
+    loadingRow: document.getElementById('loadingRow'),
+    endRow: document.getElementById('endRow'),
+    sentinel: document.getElementById('sentinel'),
+    overlay: document.getElementById('overlay'),
+
+    tagBarChips: document.getElementById('tagBarChips'),
+    addTagPill: document.getElementById('addTagPill'),
+    addTagSheet: document.getElementById('addTagSheet'),
+    newTagMode: document.getElementById('newTagMode'),
+    newTagInput: document.getElementById('newTagInput'),
+    tagSuggestions: document.getElementById('tagSuggestions'),
+    addedTagsMini: document.getElementById('addedTagsMini'),
+
+    sortSheet: document.getElementById('sortSheet'),
+    sortDirBtn: document.getElementById('sortDirBtn'),
+    sortFieldSelect: document.getElementById('sortFieldSelect'),
+    minScoreInput: document.getElementById('minScoreInput'),
+    ratingSegmented: document.getElementById('ratingSegmented'),
+    pagingSegmented: document.getElementById('pagingSegmented'),
+
+    settingsSheet: document.getElementById('settingsSheet'),
+    baseUrlInput: document.getElementById('baseUrlInput'),
+    apiKeyInput: document.getElementById('apiKeyInput'),
+    userIdInput: document.getElementById('userIdInput'),
+    proxyImagesInput: document.getElementById('proxyImagesInput'),
+
+    pagerBar: document.getElementById('pagerBar'),
+    prevPageBtn: document.getElementById('prevPageBtn'),
+    nextPageBtn: document.getElementById('nextPageBtn'),
+    pageIndicator: document.getElementById('pageIndicator'),
+
+    detailModal: document.getElementById('detailModal'),
+    detailMedia: document.getElementById('detailMedia'),
+    detailInfo: document.getElementById('detailInfo'),
+    refreshBtn: document.getElementById('refreshBtn')
+  };
+
+  var allSheets = [el.addTagSheet, el.sortSheet, el.settingsSheet];
+
+  // ---------- sheet handling ----------
+  function openSheet(sheet) {
+    el.overlay.hidden = false;
+    sheet.hidden = false;
+    requestAnimationFrame(function () { sheet.classList.add('open'); });
+  }
+  function closeSheets() {
+    allSheets.forEach(function (s) { s.classList.remove('open'); });
+    el.overlay.hidden = true;
+    setTimeout(function () {
+      allSheets.forEach(function (s) { s.hidden = true; });
+    }, 280);
+  }
+  el.overlay.addEventListener('click', closeSheets);
+
+  document.getElementById('refreshBtn').addEventListener('click', function () {
+    if (state.isLoading) return;
+    resetFeed();
+  });
+
+  // ================= TAG FILTER BAR =================
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+    });
+  }
+
+  function modeClass(mode) {
+    return mode === '-' ? 'mode-minus' : (mode === '~' ? 'mode-tilde' : 'mode-plus');
+  }
+
+  function renderTagChips() {
+    el.tagBarChips.innerHTML = '';
+    state.config.tagList.forEach(function (t, idx) {
+      var chip = document.createElement('span');
+      chip.className = 'tag-filter-chip ' + modeClass(t.mode);
+
+      var modeBtn = document.createElement('button');
+      modeBtn.className = 'mode-btn';
+      modeBtn.textContent = t.mode;
+      modeBtn.addEventListener('click', function () { cycleTagMode(idx); });
+
+      var label = document.createElement('span');
+      label.className = 'tag-label';
+      label.textContent = t.value;
+
+      var removeBtn = document.createElement('button');
+      removeBtn.className = 'remove-btn';
+      removeBtn.textContent = '✕';
+      removeBtn.addEventListener('click', function () { removeTag(idx); });
+
+      chip.appendChild(modeBtn);
+      chip.appendChild(label);
+      chip.appendChild(removeBtn);
+      el.tagBarChips.appendChild(chip);
+    });
+  }
+
+  function cycleTagMode(idx) {
+    var order = ['+', '-', '~'];
+    var t = state.config.tagList[idx];
+    if (!t) return;
+    t.mode = order[(order.indexOf(t.mode) + 1) % order.length];
+    saveConfig();
+    renderTagChips();
+    resetFeed();
+  }
+
+  function removeTag(idx) {
+    state.config.tagList.splice(idx, 1);
+    saveConfig();
+    renderTagChips();
+    resetFeed();
+  }
+
+  function addTag(rawValue, mode) {
+    var value = rawValue.trim();
+    if (!value) return;
+    if (!mode) {
+      if (value.indexOf('-') === 0) { mode = '-'; value = value.slice(1); }
+      else if (value.indexOf('~') === 0) { mode = '~'; value = value.slice(1); }
+      else { mode = '+'; }
+    }
+    value = value.trim();
+    if (!value) return;
+    var existing = state.config.tagList.some(function (t) { return t.value.toLowerCase() === value.toLowerCase(); });
+    if (existing) return;
+    state.config.tagList.push({ value: value, mode: mode });
+    saveConfig();
+    renderTagChips();
+    renderAddedMini();
+    resetFeed();
+  }
+
+  function renderAddedMini() {
+    el.addedTagsMini.innerHTML = '';
+    state.config.tagList.forEach(function (t, idx) {
+      var chip = document.createElement('span');
+      chip.className = 'tag-filter-chip ' + modeClass(t.mode);
+      chip.innerHTML =
+        '<span class="mode-btn">' + escapeHtml(t.mode) + '</span>' +
+        '<span class="tag-label">' + escapeHtml(t.value) + '</span>';
+      var removeBtn = document.createElement('button');
+      removeBtn.className = 'remove-btn';
+      removeBtn.textContent = '✕';
+      removeBtn.addEventListener('click', function () { removeTag(idx); renderAddedMini(); });
+      chip.appendChild(removeBtn);
+      el.addedTagsMini.appendChild(chip);
+    });
+  }
+
+  function openAddTagSheet() {
+    el.newTagInput.value = '';
+    el.newTagMode.dataset.mode = '+';
+    el.newTagMode.textContent = '+';
+    el.tagSuggestions.innerHTML = '';
+    renderAddedMini();
+    openSheet(el.addTagSheet);
+    setTimeout(function () { el.newTagInput.focus(); }, 300);
+  }
+  document.getElementById('addTagPill').addEventListener('click', openAddTagSheet);
+  document.getElementById('addTagBtn2').addEventListener('click', openAddTagSheet);
+
+  el.newTagMode.addEventListener('click', function () {
+    var order = ['+', '-', '~'];
+    var cur = el.newTagMode.dataset.mode;
+    var next = order[(order.indexOf(cur) + 1) % order.length];
+    el.newTagMode.dataset.mode = next;
+    el.newTagMode.textContent = next;
+  });
+
+  document.getElementById('doneAddingTags').addEventListener('click', closeSheets);
+
+  var acTimer = null;
+  el.newTagInput.addEventListener('input', function () {
+    clearTimeout(acTimer);
+    var term = el.newTagInput.value.trim().replace(/^[-~]/, '');
+    if (!term) { el.tagSuggestions.innerHTML = ''; return; }
+    acTimer = setTimeout(function () { fetchSuggestions(term); }, 250);
+  });
+
+  el.newTagInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addTag(el.newTagInput.value, el.newTagMode.dataset.mode);
+      el.newTagInput.value = '';
+      el.tagSuggestions.innerHTML = '';
+    }
+  });
+
+  function fetchSuggestions(term) {
+    var url = state.config.baseUrl + '/index.php?page=autocomplete2&term=' +
+      encodeURIComponent(term) + '&type=tag_query&limit=10';
+    fetch(url, { headers: { 'Accept': 'application/json' } })
+      .then(function (res) { return res.json(); })
+      .then(function (data) { renderSuggestions(Array.isArray(data) ? data : []); })
+      .catch(function () { el.tagSuggestions.innerHTML = ''; });
+  }
+
+  function renderSuggestions(items) {
+    el.tagSuggestions.innerHTML = '';
+    items.slice(0, 10).forEach(function (item) {
+      var value = item.value || item.term || (typeof item === 'string' ? item : '');
+      var label = item.label || value;
+      if (!value) return;
+      var row = document.createElement('button');
+      row.className = 'suggestion-row';
+      row.textContent = label;
+      row.addEventListener('click', function () {
+        addTag(value, el.newTagMode.dataset.mode);
+        el.newTagInput.value = '';
+        el.tagSuggestions.innerHTML = '';
+      });
+      el.tagSuggestions.appendChild(row);
+    });
+  }
+
+  // ================= SORT / FILTER SHEET =================
+  function setActiveSeg(container, attr, value) {
+    Array.prototype.forEach.call(container.children, function (btn) {
+      btn.classList.toggle('active', btn.dataset[attr] === value);
+    });
+  }
+
+  document.getElementById('sortBtn').addEventListener('click', function () {
+    el.sortDirBtn.textContent = state.config.sortDir === 'asc' ? '↑' : '↓';
+    el.sortFieldSelect.value = state.config.sortField;
+    el.minScoreInput.value = state.config.minScore || '';
+    setActiveSeg(el.ratingSegmented, 'rating', state.config.rating);
+    setActiveSeg(el.pagingSegmented, 'paging', state.config.pagingMode);
+    openSheet(el.sortSheet);
+  });
+
+  el.sortDirBtn.addEventListener('click', function () {
+    el.sortDirBtn.textContent = el.sortDirBtn.textContent === '↓' ? '↑' : '↓';
+  });
+
+  el.ratingSegmented.addEventListener('click', function (e) {
+    var btn = e.target.closest('.seg-btn');
+    if (!btn) return;
+    setActiveSeg(el.ratingSegmented, 'rating', btn.dataset.rating);
+  });
+  el.pagingSegmented.addEventListener('click', function (e) {
+    var btn = e.target.closest('.seg-btn');
+    if (!btn) return;
+    setActiveSeg(el.pagingSegmented, 'paging', btn.dataset.paging);
+  });
+
+  document.getElementById('applySort').addEventListener('click', function () {
+    state.config.sortDir = el.sortDirBtn.textContent === '↑' ? 'asc' : 'desc';
+    state.config.sortField = el.sortFieldSelect.value;
+    var n = parseInt(el.minScoreInput.value, 10);
+    state.config.minScore = isNaN(n) ? 0 : n;
+    var activeRating = el.ratingSegmented.querySelector('.seg-btn.active');
+    state.config.rating = activeRating ? activeRating.dataset.rating : 'safe';
+    var activePaging = el.pagingSegmented.querySelector('.seg-btn.active');
+    state.config.pagingMode = activePaging ? activePaging.dataset.paging : 'infinite';
+    saveConfig();
+    closeSheets();
+    applyPagingModeUI();
+    resetFeed();
+  });
+
+  document.getElementById('resetSort').addEventListener('click', function () {
+    state.config.sortField = DEFAULTS.sortField;
+    state.config.sortDir = DEFAULTS.sortDir;
+    state.config.minScore = DEFAULTS.minScore;
+    state.config.rating = DEFAULTS.rating;
+    state.config.pagingMode = DEFAULTS.pagingMode;
+    saveConfig();
+    closeSheets();
+    applyPagingModeUI();
+    resetFeed();
+  });
+
+  // ================= SETTINGS SHEET =================
+  document.getElementById('settingsBtn').addEventListener('click', function () {
+    el.baseUrlInput.value = state.config.baseUrl;
+    el.apiKeyInput.value = state.config.apiKey;
+    el.userIdInput.value = state.config.userId;
+    el.proxyImagesInput.checked = !!state.config.proxyImages;
+    openSheet(el.settingsSheet);
+  });
+
+  document.getElementById('saveSettings').addEventListener('click', function () {
+    var url = el.baseUrlInput.value.trim().replace(/\/+$/, '');
+    state.config.baseUrl = url || DEFAULTS.baseUrl;
+    state.config.apiKey = el.apiKeyInput.value.trim();
+    state.config.userId = el.userIdInput.value.trim();
+    state.config.proxyImages = el.proxyImagesInput.checked;
+    saveConfig();
+    closeSheets();
+    resetFeed();
+  });
+
+  // ================= API =================
+  function buildTags() {
+    var parts = [];
+    state.config.tagList.forEach(function (t) {
+      var prefix = t.mode === '+' ? '' : t.mode;
+      parts.push(prefix + t.value);
+    });
+    if (state.config.rating && state.config.rating !== 'all') {
+      parts.push('rating:' + state.config.rating);
+    }
+    if (state.config.sortField) {
+      parts.push('sort:' + state.config.sortField + ':' + state.config.sortDir);
+    }
+    if (state.config.minScore && state.config.minScore > 0) {
+      parts.push('score:>=' + state.config.minScore);
+    }
+    return parts.join(' ').trim();
+  }
+
+  function buildUrl(pid) {
+    var url = new URL(state.config.baseUrl + '/index.php');
+    url.searchParams.set('page', 'dapi');
+    url.searchParams.set('s', 'post');
+    url.searchParams.set('q', 'index');
+    url.searchParams.set('json', '1');
+    url.searchParams.set('limit', String(LIMIT));
+    url.searchParams.set('pid', String(pid));
+    var tags = buildTags();
+    if (tags) url.searchParams.set('tags', tags);
+    if (state.config.apiKey) url.searchParams.set('api_key', state.config.apiKey);
+    if (state.config.userId) url.searchParams.set('user_id', state.config.userId);
+    return url.toString();
+  }
+
+  function fetchPosts(pid) {
+    var url = buildUrl(pid);
+    return fetch(url, { headers: { 'Accept': 'application/json' } }).then(function (res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    }).then(function (data) {
+      if (Array.isArray(data)) return data;
+      if (data && Array.isArray(data.post)) return data.post;
+      return [];
+    });
+  }
+
+  // ================= RENDERING =================
+  function isVideo(url) { return /\.(mp4|webm)(\?|$)/i.test(url || ''); }
+  function toHttps(url) {
+    if (typeof url === 'string' && url.indexOf('http://') === 0) {
+      return 'https://' + url.slice('http://'.length);
+    }
+    return url;
+  }
+  function mediaSrc(url) {
+    url = toHttps(url);
+    if (state.config.proxyImages && url) {
+      return state.config.baseUrl + '/media?url=' + encodeURIComponent(url);
+    }
+    return url;
+  }
+
+  function renderPost(post) {
+    var article = document.createElement('article');
+    article.className = 'post';
+
+    var mediaWrap = document.createElement('div');
+    mediaWrap.className = 'post-media';
+
+    var rawMediaUrl = post.sample_url || post.file_url;
+    var mediaUrl = mediaSrc(rawMediaUrl);
+    var fullUrl = mediaSrc(post.file_url || post.sample_url);
+    var w = post.width || post.sample_width || 800;
+    var h = post.height || post.sample_height || 600;
+
+    var mediaEl;
+    if (isVideo(rawMediaUrl)) {
+      mediaEl = document.createElement('video');
+      mediaEl.src = mediaUrl;
+      mediaEl.controls = true;
+      mediaEl.muted = true;
+      mediaEl.loop = true;
+      mediaEl.playsInline = true;
+      mediaEl.preload = 'metadata';
+    } else {
+      mediaEl = document.createElement('img');
+      mediaEl.src = mediaUrl;
+      mediaEl.loading = 'lazy';
+      mediaEl.alt = (post.tags || '').split(' ').slice(0, 6).join(', ');
+    }
+    mediaEl.referrerPolicy = 'no-referrer';
+    mediaEl.style.aspectRatio = w + ' / ' + h;
+    mediaEl.addEventListener('click', function () { openDetail(post, fullUrl); });
+    mediaWrap.appendChild(mediaEl);
+
+    // collapsed meta toggle bar
+    var toggle = document.createElement('button');
+    toggle.className = 'meta-toggle';
+    toggle.setAttribute('aria-expanded', 'false');
+    var ratingVal = (post.rating || 'unknown').toLowerCase();
+    toggle.innerHTML =
+      '<span class="meta-summary"><span class="arrow">&#9650;</span> ' +
+      (post.score != null ? post.score : '0') +
+      ' <span class="rating-tag ' + ratingVal + '">' + ratingVal + '</span></span>' +
+      '<span class="meta-chevron">▾</span>';
+
+    var expanded = document.createElement('div');
+    expanded.className = 'post-meta-expanded';
+    expanded.hidden = true;
+    var tagRow = document.createElement('div');
+    tagRow.className = 'tag-row';
+    var tags = (post.tags || '').trim().split(/\s+/).filter(Boolean);
+    tags.forEach(function (tag) {
+      var chip = document.createElement('button');
+      chip.className = 'tag-chip';
+      chip.textContent = tag;
+      chip.addEventListener('click', function (e) {
+        e.stopPropagation();
+        addTag(tag, '+');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+      tagRow.appendChild(chip);
+    });
+    expanded.appendChild(tagRow);
+
+    toggle.addEventListener('click', function () {
+      var isOpen = toggle.getAttribute('aria-expanded') === 'true';
+      toggle.setAttribute('aria-expanded', String(!isOpen));
+      expanded.hidden = isOpen;
+    });
+
+    article.appendChild(mediaWrap);
+    article.appendChild(toggle);
+    article.appendChild(expanded);
+    return article;
+  }
+
+  function openDetail(post, fullUrl) {
+    el.detailMedia.innerHTML = '';
+    var mediaEl;
+    if (isVideo(post.file_url || post.sample_url)) {
+      mediaEl = document.createElement('video');
+      mediaEl.src = fullUrl;
+      mediaEl.controls = true;
+      mediaEl.autoplay = true;
+      mediaEl.loop = true;
+      mediaEl.playsInline = true;
+    } else {
+      mediaEl = document.createElement('img');
+      mediaEl.src = fullUrl;
+    }
+    mediaEl.referrerPolicy = 'no-referrer';
+    el.detailMedia.appendChild(mediaEl);
+
+    var tags = (post.tags || '').trim().split(/\s+/).filter(Boolean);
+    el.detailInfo.innerHTML =
+      'score ' + (post.score != null ? post.score : '0') + ' &middot; ' +
+      (post.rating || 'unknown') + ' &middot; ' + post.width + '&times;' + post.height + '<br>' +
+      tags.join(' ') +
+      (post.source ? '<br><a href="' + post.source + '" target="_blank" rel="noopener">source</a>' : '');
+
+    el.detailModal.hidden = false;
+  }
+  document.getElementById('closeDetail').addEventListener('click', function () {
+    el.detailModal.hidden = true;
+    el.detailMedia.innerHTML = '';
+  });
+
+  // ================= FEED LIFECYCLE =================
+  function applyPagingModeUI() {
+    var paged = state.config.pagingMode === 'paged';
+    el.pagerBar.hidden = !paged;
+    el.sentinel.hidden = paged;
+  }
+
+  function resetFeed() {
+    state.pid = 0;
+    state.reachedEnd = false;
+    el.postsContainer.innerHTML = '';
+    el.feedEmpty.hidden = true;
+    el.feedError.hidden = true;
+    el.endRow.hidden = true;
+    loadPage(0, { append: false });
+  }
+
+  function loadMoreInfinite() {
+    if (state.config.pagingMode === 'paged') return;
+    if (state.isLoading || state.reachedEnd) return;
+    loadPage(state.pid + 1, { append: true });
+  }
+
+  function loadPage(pid, opts) {
+    opts = opts || {};
+    if (state.isLoading) return;
+    state.isLoading = true;
+    el.loadingRow.hidden = false;
+    el.feedError.hidden = true;
+
+    fetchPosts(pid).then(function (posts) {
+      state.isLoading = false;
+      el.loadingRow.hidden = true;
+      state.pid = pid;
+
+      if (posts.length === 0) {
+        state.reachedEnd = true;
+        if (!opts.append) {
+          el.postsContainer.innerHTML = '';
+          if (pid === 0) {
+            el.feedEmpty.hidden = false;
+          } else {
+            // ran past the last page in paged mode; step back and let the user know via disabled next
+          }
+        } else {
+          el.endRow.hidden = false;
+        }
+        updatePagerUI();
+        return;
+      }
+
+      if (opts.append) {
+        posts.forEach(function (post) { el.postsContainer.appendChild(renderPost(post)); });
+      } else {
+        el.postsContainer.innerHTML = '';
+        posts.forEach(function (post) { el.postsContainer.appendChild(renderPost(post)); });
+        window.scrollTo({ top: 0 });
+      }
+
+      if (posts.length < LIMIT) {
+        state.reachedEnd = true;
+        if (opts.append) el.endRow.hidden = false;
+      } else {
+        state.reachedEnd = false;
+      }
+      updatePagerUI();
+    }).catch(function (err) {
+      state.isLoading = false;
+      el.loadingRow.hidden = true;
+      if (!opts.append) {
+        el.feedErrorMsg.textContent = 'check your base url in settings and your connection. (' + err.message + ')';
+        el.feedError.hidden = false;
+      }
+    });
+  }
+
+  function updatePagerUI() {
+    el.pageIndicator.textContent = 'page ' + (state.pid + 1);
+    el.prevPageBtn.disabled = state.pid === 0;
+    el.nextPageBtn.disabled = state.reachedEnd;
+  }
+
+  document.getElementById('retryBtn').addEventListener('click', function () {
+    el.feedError.hidden = true;
+    loadPage(state.pid, { append: false });
+  });
+
+  el.prevPageBtn.addEventListener('click', function () {
+    if (state.pid === 0 || state.isLoading) return;
+    loadPage(state.pid - 1, { append: false });
+  });
+  el.nextPageBtn.addEventListener('click', function () {
+    if (state.reachedEnd || state.isLoading) return;
+    loadPage(state.pid + 1, { append: false });
+  });
+
+  var observer = new IntersectionObserver(function (entries) {
+    if (entries[0].isIntersecting) loadMoreInfinite();
+  }, { rootMargin: '400px' });
+  observer.observe(el.sentinel);
+
+  // ---------- boot ----------
+  renderTagChips();
+  applyPagingModeUI();
+  resetFeed();
+})();
+</script>
+</body>
+</html>
