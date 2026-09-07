@@ -221,7 +221,13 @@
   .pager-btn { border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; color: var(--text); font-size: 0.85rem; }
   .pager-btn:disabled { color: var(--text-muted); opacity: 0.35; }
   .pager-btn:not(:disabled):active { border-color: var(--accent); color: var(--accent); }
-  .page-indicator { font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-muted); }
+  .page-jump { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-muted); }
+  .page-jump input {
+    width: 56px; text-align: center; padding: 8px 6px;
+    -moz-appearance: textfield;
+  }
+  .page-jump input::-webkit-outer-spin-button,
+  .page-jump input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
   /* ---------- overlay + sheets ---------- */
   .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 30; }
@@ -350,7 +356,10 @@
 
   <div id="pagerBar" class="pager-bar" hidden>
     <button id="prevPageBtn" class="pager-btn">‹ prev</button>
-    <span id="pageIndicator" class="page-indicator">page 1</span>
+    <div class="page-jump">
+      <span>page</span>
+      <input id="pageInput" type="number" inputmode="numeric" min="1" value="1" />
+    </div>
     <button id="nextPageBtn" class="pager-btn">next ›</button>
   </div>
 
@@ -539,7 +548,7 @@
     pagerBar: document.getElementById('pagerBar'),
     prevPageBtn: document.getElementById('prevPageBtn'),
     nextPageBtn: document.getElementById('nextPageBtn'),
-    pageIndicator: document.getElementById('pageIndicator'),
+    pageInput: document.getElementById('pageInput'),
 
     detailModal: document.getElementById('detailModal'),
     detailMedia: document.getElementById('detailMedia'),
@@ -614,14 +623,12 @@
     t.mode = order[(order.indexOf(t.mode) + 1) % order.length];
     saveConfig();
     renderTagChips();
-    resetFeed();
   }
 
   function removeTag(idx) {
     state.config.tagList.splice(idx, 1);
     saveConfig();
     renderTagChips();
-    resetFeed();
   }
 
   function addTag(rawValue, mode) {
@@ -640,7 +647,6 @@
     saveConfig();
     renderTagChips();
     renderAddedMini();
-    resetFeed();
   }
 
   function renderAddedMini() {
@@ -923,7 +929,6 @@
       chip.addEventListener('click', function (e) {
         e.stopPropagation();
         addTag(tag, '+');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
       });
       tagRow.appendChild(chip);
     });
@@ -1049,10 +1054,21 @@
   }
 
   function updatePagerUI() {
-    el.pageIndicator.textContent = 'page ' + (state.pid + 1);
+    el.pageInput.value = state.pid + 1;
     el.prevPageBtn.disabled = state.pid === 0;
     el.nextPageBtn.disabled = state.reachedEnd;
   }
+
+  function jumpToPage() {
+    var n = parseInt(el.pageInput.value, 10);
+    if (isNaN(n) || n < 1) { el.pageInput.value = state.pid + 1; return; }
+    if (state.isLoading || (n - 1) === state.pid) return;
+    loadPage(n - 1, { append: false });
+  }
+  el.pageInput.addEventListener('change', jumpToPage);
+  el.pageInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); el.pageInput.blur(); jumpToPage(); }
+  });
 
   document.getElementById('retryBtn').addEventListener('click', function () {
     el.feedError.hidden = true;
