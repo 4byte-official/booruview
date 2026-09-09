@@ -85,7 +85,10 @@
     background: rgba(22, 20, 18, 0.94);
     backdrop-filter: blur(10px);
     padding-top: env(safe-area-inset-top);
+    transition: transform 0.25s ease;
   }
+  .header.collapsed { transform: translateY(-100%); }
+  @media (prefers-reduced-motion: reduce) { .header { transition: none; } }
 
   .topbar {
     display: flex;
@@ -217,7 +220,10 @@
     border-top: 1px solid var(--border);
     max-width: 640px;
     margin: 0 auto;
+    transition: transform 0.25s ease;
   }
+  .pager-bar.collapsed { transform: translateY(100%); }
+  @media (prefers-reduced-motion: reduce) { .pager-bar { transition: none; } }
   .pager-btn { border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; color: var(--text); font-size: 0.85rem; }
   .pager-btn:disabled { color: var(--text-muted); opacity: 0.35; }
   .pager-btn:not(:disabled):active { border-color: var(--accent); color: var(--accent); }
@@ -315,7 +321,7 @@
 
 <div id="app">
 
-  <header class="header">
+  <header class="header" id="appHeader">
     <div class="topbar">
       <span class="wordmark">boorufeed</span>
       <div class="topbar-actions">
@@ -467,6 +473,25 @@
 
   var LIMIT = 30;
   var STORAGE_KEY = 'boorufeed:config';
+  var SESSION_KEY = 'boorufeed:session';
+
+  function loadSession() {
+    try {
+      var raw = localStorage.getItem(SESSION_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (e) { /* storage unavailable */ }
+    return null;
+  }
+
+  function saveSession() {
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify({
+        pid: state.pid,
+        pagingMode: state.config.pagingMode,
+        scrollY: window.scrollY
+      }));
+    } catch (e) { /* storage unavailable */ }
+  }
 
   var state = {
     config: loadConfig(),
@@ -515,6 +540,7 @@
 
   // ---------- dom refs ----------
   var el = {
+    header: document.getElementById('appHeader'),
     postsContainer: document.getElementById('postsContainer'),
     feedEmpty: document.getElementById('feedEmpty'),
     feedError: document.getElementById('feedError'),
@@ -1025,6 +1051,7 @@
           el.endRow.hidden = false;
         }
         updatePagerUI();
+        saveSession();
         return;
       }
 
@@ -1043,6 +1070,7 @@
         state.reachedEnd = false;
       }
       updatePagerUI();
+      saveSession();
     }).catch(function (err) {
       state.isLoading = false;
       el.loadingRow.hidden = true;
@@ -1089,10 +1117,119 @@
   }, { rootMargin: '400px' });
   observer.observe(el.sentinel);
 
+  // ---------- header/pager auto-hide on scroll ----------
+  var lastScrollY = window.scrollY;
+  var scrollTicking = false;
+  var sessionSaveTimer = null;
+  var TOP_THRESHOLD = 32;
+  var BOTTOM_THRESHOLD = 48;
+
+  function handleScroll() {
+    var currentY = window.scrollY;
+    var doc = document.documentElement;
+    var atTop = currentY <= TOP_THRESHOLD;
+    var atBottom = (window.innerHeight + currentY) >= (doc.scrollHeight - BOTTOM_THRESHOLD);
+
+    if (atTop || atBottom) {
+      el.header.classList.remove('collapsed');
+      el.pagerBar.classList.remove('collapsed');
+    } else if (currentY > lastScrollY) {
+      el.header.classList.add('collapsed');
+      el.pagerBar.classList.add('collapsed');
+    } else if (currentY < lastScrollY) {
+      el.header.classList.remove('collapsed');
+      el.pagerBar.classList.remove('collapsed');
+    }
+    lastScrollY = currentY;
+    scrollTicking = false;
+
+    clearTimeout(sessionSaveTimer);
+    sessionSaveTimer = setTimeout(saveSession, 400);
+  }
+
+  window.addEventListener('scroll', function () {
+    if (!scrollTicking) {
+      requestAnimationFrame(handleScroll);
+      scrollTicking = true;
+    }
+  }, { passive: true });
+
+  // ---------- session restore ----------
+  function restoreSession(session) {
+    el.postsContainer.innerHTML = '';
+    el.feedEmpty.hidden = true;
+    el.feedError.hidden = true;
+    el.endRow.hidden = true;
+    state.reachedEnd = false;
+
+    var targetPid = session.pid || 0;
+
+    function finish() {
+      el.loadingRow.hidden = true;
+      updatePagerUI();
+      saveSession();
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          window.scrollTo({ top: session.scrollY || 0 });
+        });
+      });
+    }
+
+    if (session.pagingMode === 'paged') {
+      state.isLoading = true;
+      el.loadingRow.hidden = false;
+      fetchPosts(targetPid).then(function (posts) {
+        state.isLoading = false;
+        state.pid = targetPid;
+        posts.forEach(function (post) { el.postsContainer.appendChild(renderPost(post)); });
+        if (posts.length < LIMIT) state.reachedEnd = true;
+        if (posts.length === 0 && targetPid === 0) el.feedEmpty.hidden = false;
+        finish();
+      }).catch(function (err) {
+        state.isLoading = false;
+        el.loadingRow.hidden = true;
+        el.feedErrorMsg.textContent = 'check your base url in settings and your connection. (' + err.message + ')';
+        el.feedError.hidden = false;
+      });
+      return;
+    }
+
+    // infinite mode: sequentially rebuild pages 0..targetPid so scroll continuity holds up
+    function step(pid) {
+      state.isLoading = true;
+      el.loadingRow.hidden = false;
+      fetchPosts(pid).then(function (posts) {
+        state.isLoading = false;
+        state.pid = pid;
+        posts.forEach(function (post) { el.postsContainer.appendChild(renderPost(post)); });
+        if (posts.length < LIMIT) state.reachedEnd = true;
+
+        if (pid < targetPid && !state.reachedEnd) {
+          step(pid + 1);
+        } else {
+          if (posts.length === 0 && pid === 0) el.feedEmpty.hidden = false;
+          finish();
+        }
+      }).catch(function () {
+        state.isLoading = false;
+        // partial restore is fine; stop here rather than blocking on an error
+        finish();
+      });
+    }
+    step(0);
+  }
+
   // ---------- boot ----------
   renderTagChips();
   applyPagingModeUI();
-  resetFeed();
+  (function boot() {
+    var session = loadSession();
+    if (session && (session.pid > 0 || session.scrollY > 80)) {
+      restoreSession(session);
+    } else {
+      resetFeed();
+    }
+  })();
 })();
 </script>
 </body>
