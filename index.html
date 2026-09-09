@@ -1154,6 +1154,17 @@
     }
   }, { passive: true });
 
+  // Debounced saves cover active scrolling, but a pending setTimeout can get
+  // killed if the app is backgrounded/closed before it fires. These two
+  // events are the reliable signal on mobile that the app is going away, so
+  // force an immediate, un-debounced save right then.
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) saveSession();
+  });
+  window.addEventListener('pagehide', function () {
+    saveSession();
+  });
+
   // ---------- session restore ----------
   function restoreSession(session) {
     el.postsContainer.innerHTML = '';
