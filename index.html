@@ -1205,29 +1205,36 @@
       return;
     }
 
-    // infinite mode: sequentially rebuild pages 0..targetPid so scroll continuity holds up
-    function step(pid) {
-      state.isLoading = true;
-      el.loadingRow.hidden = false;
-      fetchPosts(pid).then(function (posts) {
-        state.isLoading = false;
-        state.pid = pid;
-        posts.forEach(function (post) { el.postsContainer.appendChild(renderPost(post)); });
-        if (posts.length < LIMIT) state.reachedEnd = true;
+    // infinite mode: fetch pages 0..targetPid concurrently rather than one
+    // at a time - a sequential rebuild meant N round-trips before anything
+    // showed up, which made reopening the app feel slow after scrolling deep.
+    var RESTORE_MAX_PAGES = 12;
+    var cappedTarget = Math.min(targetPid, RESTORE_MAX_PAGES);
+    var pids = [];
+    for (var i = 0; i <= cappedTarget; i++) pids.push(i);
 
-        if (pid < targetPid && !state.reachedEnd) {
-          step(pid + 1);
-        } else {
-          if (posts.length === 0 && pid === 0) el.feedEmpty.hidden = false;
-          finish();
-        }
-      }).catch(function () {
-        state.isLoading = false;
-        // partial restore is fine; stop here rather than blocking on an error
-        finish();
-      });
-    }
-    step(0);
+    state.isLoading = true;
+    el.loadingRow.hidden = false;
+
+    Promise.all(pids.map(function (pid) {
+      return fetchPosts(pid).catch(function () { return null; }); // a failed page shouldn't abort the whole restore
+    })).then(function (pages) {
+      state.isLoading = false;
+      var renderedAny = false;
+      var lastPid = 0;
+
+      for (var p = 0; p < pages.length; p++) {
+        var posts = pages[p];
+        if (posts === null) { lastPid = p; break; } // stop at the first failed page
+        if (posts.length > 0) renderedAny = true;
+        posts.forEach(function (post) { el.postsContainer.appendChild(renderPost(post)); });
+        lastPid = p;
+        if (posts.length < LIMIT) { state.reachedEnd = true; break; }
+      }
+      state.pid = lastPid;
+      if (!renderedAny && lastPid === 0) el.feedEmpty.hidden = false;
+      finish();
+    });
   }
 
   // ---------- boot ----------
