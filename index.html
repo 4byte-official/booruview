@@ -212,33 +212,44 @@
     z-index: 25;
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 8px 10px;
-    background: rgba(30, 27, 24, 0.96);
-    backdrop-filter: blur(10px);
-    border: 1px solid var(--border);
+    gap: 2px;
+    padding: 5px 6px;
+    background: rgba(30, 27, 24, 0.55);
+    backdrop-filter: blur(6px);
+    border: 1px solid rgba(50, 45, 40, 0.6);
     border-radius: 999px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.3);
   }
   .drag-handle {
     color: var(--text-muted);
-    font-size: 0.95rem;
-    padding: 6px 4px 6px 6px;
+    font-size: 0.8rem;
+    padding: 5px 3px 5px 5px;
     cursor: grab;
     touch-action: none;
     line-height: 1;
+    opacity: 0.8;
   }
   .drag-handle:active { cursor: grabbing; color: var(--accent); }
-  .pager-btn { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; color: var(--text); font-size: 0.8rem; }
+  .pager-btn { border: 1px solid rgba(50, 45, 40, 0.6); border-radius: 8px; padding: 5px 9px; color: var(--text); font-size: 0.75rem; }
   .pager-btn:disabled { color: var(--text-muted); opacity: 0.35; }
   .pager-btn:not(:disabled):active { border-color: var(--accent); color: var(--accent); }
-  .page-jump { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 0.76rem; color: var(--text-muted); }
-  .page-jump input {
-    width: 52px; text-align: center; padding: 7px 4px;
+
+  .paging-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+  .paging-row input {
+    width: 60px; text-align: center; padding: 7px 4px;
     -moz-appearance: textfield;
   }
-  .page-jump input::-webkit-outer-spin-button,
-  .page-jump input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .paging-row input::-webkit-outer-spin-button,
+  .paging-row input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
   /* ---------- overlay + sheets ---------- */
   .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 30; }
@@ -340,6 +351,10 @@
       <div class="tagbar-chips" id="tagBarChips" style="display:contents;"></div>
       <button id="addTagPill" class="add-tag-pill">+ tag</button>
     </div>
+    <div class="paging-row" id="pagingRow" hidden>
+      <span>page</span>
+      <input id="pageInput" type="number" inputmode="numeric" min="1" value="1" />
+    </div>
   </header>
 
   <main id="feed" class="feed">
@@ -368,9 +383,6 @@
   <div id="pagerBar" class="pager-bar" hidden>
     <span id="navDragHandle" class="drag-handle" aria-label="Drag to move">⋮⋮</span>
     <button id="prevPageBtn" class="pager-btn">‹</button>
-    <div class="page-jump">
-      <input id="pageInput" type="number" inputmode="numeric" min="1" value="1" />
-    </div>
     <button id="nextPageBtn" class="pager-btn">›</button>
   </div>
 
@@ -578,6 +590,7 @@
     proxyImagesInput: document.getElementById('proxyImagesInput'),
 
     pagerBar: document.getElementById('pagerBar'),
+    pagingRow: document.getElementById('pagingRow'),
     navDragHandle: document.getElementById('navDragHandle'),
     prevPageBtn: document.getElementById('prevPageBtn'),
     nextPageBtn: document.getElementById('nextPageBtn'),
@@ -1046,6 +1059,7 @@
   function applyPagingModeUI() {
     var paged = state.config.pagingMode === 'paged';
     el.pagerBar.hidden = !paged;
+    el.pagingRow.hidden = !paged;
     el.sentinel.hidden = paged;
     if (paged) initNavPosition();
   }
