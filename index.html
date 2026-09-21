@@ -206,30 +206,35 @@
 
   #sentinel { height: 1px; }
 
-  /* ---------- pager (paged mode) ---------- */
+  /* ---------- pager (paged mode) - floating, draggable ---------- */
   .pager-bar {
-    position: sticky;
-    bottom: 0;
+    position: fixed;
+    z-index: 25;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
-    background: rgba(22, 20, 18, 0.95);
+    gap: 6px;
+    padding: 8px 10px;
+    background: rgba(30, 27, 24, 0.96);
     backdrop-filter: blur(10px);
-    border-top: 1px solid var(--border);
-    max-width: 640px;
-    margin: 0 auto;
-    transition: transform 0.25s ease;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
   }
-  .pager-bar.collapsed { transform: translateY(100%); }
-  @media (prefers-reduced-motion: reduce) { .pager-bar { transition: none; } }
-  .pager-btn { border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; color: var(--text); font-size: 0.85rem; }
+  .drag-handle {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    padding: 6px 4px 6px 6px;
+    cursor: grab;
+    touch-action: none;
+    line-height: 1;
+  }
+  .drag-handle:active { cursor: grabbing; color: var(--accent); }
+  .pager-btn { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; color: var(--text); font-size: 0.8rem; }
   .pager-btn:disabled { color: var(--text-muted); opacity: 0.35; }
   .pager-btn:not(:disabled):active { border-color: var(--accent); color: var(--accent); }
-  .page-jump { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-muted); }
+  .page-jump { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 0.76rem; color: var(--text-muted); }
   .page-jump input {
-    width: 56px; text-align: center; padding: 8px 6px;
+    width: 52px; text-align: center; padding: 7px 4px;
     -moz-appearance: textfield;
   }
   .page-jump input::-webkit-outer-spin-button,
@@ -361,12 +366,12 @@
   </main>
 
   <div id="pagerBar" class="pager-bar" hidden>
-    <button id="prevPageBtn" class="pager-btn">‹ prev</button>
+    <span id="navDragHandle" class="drag-handle" aria-label="Drag to move">⋮⋮</span>
+    <button id="prevPageBtn" class="pager-btn">‹</button>
     <div class="page-jump">
-      <span>page</span>
       <input id="pageInput" type="number" inputmode="numeric" min="1" value="1" />
     </div>
-    <button id="nextPageBtn" class="pager-btn">next ›</button>
+    <button id="nextPageBtn" class="pager-btn">›</button>
   </div>
 
   <div id="overlay" class="overlay" hidden></div>
@@ -468,7 +473,8 @@
     sortDir: 'desc',
     minScore: 0,
     pagingMode: 'infinite',
-    proxyImages: false
+    proxyImages: false,
+    navPosition: null
   };
 
   var LIMIT = 30;
@@ -572,6 +578,7 @@
     proxyImagesInput: document.getElementById('proxyImagesInput'),
 
     pagerBar: document.getElementById('pagerBar'),
+    navDragHandle: document.getElementById('navDragHandle'),
     prevPageBtn: document.getElementById('prevPageBtn'),
     nextPageBtn: document.getElementById('nextPageBtn'),
     pageInput: document.getElementById('pageInput'),
@@ -884,6 +891,7 @@
 
   // ================= RENDERING =================
   function isVideo(url) { return /\.(mp4|webm)(\?|$)/i.test(url || ''); }
+  function isGif(url) { return /\.gif(\?|$)/i.test(url || ''); }
   function toHttps(url) {
     if (typeof url === 'string' && url.indexOf('http://') === 0) {
       return 'https://' + url.slice('http://'.length);
@@ -896,6 +904,34 @@
       return state.config.baseUrl + '/media?url=' + encodeURIComponent(url);
     }
     return url;
+  }
+
+  // Pauses <video> playback and unloads animated <gif> frames once scrolled
+  // out of view, so off-screen media stops burning CPU/battery. Gifs have no
+  // JS play/pause API, so the trick is dropping the src (stopping decode)
+  // and restoring it on return, which restarts the loop from frame one -
+  // an acceptable tradeoff for short decorative loops.
+  var mediaVisibilityObserver = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      var target = entry.target;
+      var type = target.dataset.mediaType;
+      if (type === 'video') {
+        if (!entry.isIntersecting) target.pause();
+      } else if (type === 'gif') {
+        if (!entry.isIntersecting) {
+          if (target.src) {
+            target.dataset.pausedSrc = target.src;
+            target.removeAttribute('src');
+          }
+        } else if (!target.src && target.dataset.pausedSrc) {
+          target.src = target.dataset.pausedSrc;
+        }
+      }
+    });
+  }, { threshold: 0 });
+
+  function clearMediaObservers() {
+    mediaVisibilityObserver.disconnect();
   }
 
   function renderPost(post) {
@@ -920,16 +956,19 @@
       mediaEl.loop = true;
       mediaEl.playsInline = true;
       mediaEl.preload = 'metadata';
+      mediaEl.dataset.mediaType = 'video';
     } else {
       mediaEl = document.createElement('img');
       mediaEl.src = mediaUrl;
       mediaEl.loading = 'lazy';
       mediaEl.alt = (post.tags || '').split(' ').slice(0, 6).join(', ');
+      if (isGif(rawMediaUrl)) mediaEl.dataset.mediaType = 'gif';
     }
     mediaEl.referrerPolicy = 'no-referrer';
     mediaEl.style.aspectRatio = w + ' / ' + h;
     mediaEl.addEventListener('click', function () { openDetail(post, fullUrl); });
     mediaWrap.appendChild(mediaEl);
+    if (mediaEl.dataset.mediaType) mediaVisibilityObserver.observe(mediaEl);
 
     // collapsed meta toggle bar
     var toggle = document.createElement('button');
@@ -1008,12 +1047,13 @@
     var paged = state.config.pagingMode === 'paged';
     el.pagerBar.hidden = !paged;
     el.sentinel.hidden = paged;
+    if (paged) initNavPosition();
   }
 
   function resetFeed() {
     state.pid = 0;
     state.reachedEnd = false;
-    el.postsContainer.innerHTML = '';
+    clearMediaObservers(); el.postsContainer.innerHTML = '';
     el.feedEmpty.hidden = true;
     el.feedError.hidden = true;
     el.endRow.hidden = true;
@@ -1041,7 +1081,7 @@
       if (posts.length === 0) {
         state.reachedEnd = true;
         if (!opts.append) {
-          el.postsContainer.innerHTML = '';
+          clearMediaObservers(); el.postsContainer.innerHTML = '';
           if (pid === 0) {
             el.feedEmpty.hidden = false;
           } else {
@@ -1058,7 +1098,7 @@
       if (opts.append) {
         posts.forEach(function (post) { el.postsContainer.appendChild(renderPost(post)); });
       } else {
-        el.postsContainer.innerHTML = '';
+        clearMediaObservers(); el.postsContainer.innerHTML = '';
         posts.forEach(function (post) { el.postsContainer.appendChild(renderPost(post)); });
         window.scrollTo({ top: 0 });
       }
@@ -1117,7 +1157,7 @@
   }, { rootMargin: '400px' });
   observer.observe(el.sentinel);
 
-  // ---------- header/pager auto-hide on scroll ----------
+  // ---------- header auto-hide on scroll ----------
   var lastScrollY = window.scrollY;
   var scrollTicking = false;
   var sessionSaveTimer = null;
@@ -1132,13 +1172,10 @@
 
     if (atTop || atBottom) {
       el.header.classList.remove('collapsed');
-      el.pagerBar.classList.remove('collapsed');
     } else if (currentY > lastScrollY) {
       el.header.classList.add('collapsed');
-      el.pagerBar.classList.add('collapsed');
     } else if (currentY < lastScrollY) {
       el.header.classList.remove('collapsed');
-      el.pagerBar.classList.remove('collapsed');
     }
     lastScrollY = currentY;
     scrollTicking = false;
@@ -1154,6 +1191,58 @@
     }
   }, { passive: true });
 
+  // ---------- draggable floating nav ----------
+  function clampPos(val, min, max) { return Math.max(min, Math.min(max, val)); }
+
+  function setNavPosition(x, y, persist) {
+    var rect = el.pagerBar.getBoundingClientRect();
+    var maxX = window.innerWidth - rect.width - 8;
+    var maxY = window.innerHeight - rect.height - 8;
+    x = clampPos(x, 8, Math.max(8, maxX));
+    y = clampPos(y, 8, Math.max(8, maxY));
+    el.pagerBar.style.left = x + 'px';
+    el.pagerBar.style.top = y + 'px';
+    el.pagerBar.style.right = 'auto';
+    el.pagerBar.style.bottom = 'auto';
+    if (persist) {
+      state.config.navPosition = { x: x, y: y };
+      saveConfig();
+    }
+  }
+
+  function initNavPosition() {
+    if (el.pagerBar.hidden) return;
+    var pos = state.config.navPosition;
+    if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
+      setNavPosition(pos.x, pos.y, false);
+    } else {
+      var rect = el.pagerBar.getBoundingClientRect();
+      setNavPosition(window.innerWidth - rect.width - 20, window.innerHeight - rect.height - 110, false);
+    }
+  }
+
+  var navDrag = null;
+  el.navDragHandle.addEventListener('pointerdown', function (e) {
+    var rect = el.pagerBar.getBoundingClientRect();
+    navDrag = { startX: e.clientX, startY: e.clientY, startLeft: rect.left, startTop: rect.top };
+    el.navDragHandle.setPointerCapture(e.pointerId);
+  });
+  el.navDragHandle.addEventListener('pointermove', function (e) {
+    if (!navDrag) return;
+    var dx = e.clientX - navDrag.startX;
+    var dy = e.clientY - navDrag.startY;
+    setNavPosition(navDrag.startLeft + dx, navDrag.startTop + dy, false);
+  });
+  function endNavDrag() {
+    if (!navDrag) return;
+    var rect = el.pagerBar.getBoundingClientRect();
+    setNavPosition(rect.left, rect.top, true);
+    navDrag = null;
+  }
+  el.navDragHandle.addEventListener('pointerup', endNavDrag);
+  el.navDragHandle.addEventListener('pointercancel', endNavDrag);
+  window.addEventListener('resize', initNavPosition);
+
   // Debounced saves cover active scrolling, but a pending setTimeout can get
   // killed if the app is backgrounded/closed before it fires. These two
   // events are the reliable signal on mobile that the app is going away, so
@@ -1167,7 +1256,7 @@
 
   // ---------- session restore ----------
   function restoreSession(session) {
-    el.postsContainer.innerHTML = '';
+    clearMediaObservers(); el.postsContainer.innerHTML = '';
     el.feedEmpty.hidden = true;
     el.feedError.hidden = true;
     el.endRow.hidden = true;
